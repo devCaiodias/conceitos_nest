@@ -5,6 +5,7 @@ import { HashingService } from "src/auth/hashing/hashing.service";
 import { Test, TestingModule } from '@nestjs/testing'
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { CreatePessoaDto } from "./dto/create-pessoa.dto";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 
 // Mock (Mock é uma versão falsa de algo real, usada em testes para isolar e controlar o comportamento daquilo que você não quer (ou não pode) executar de verdade.)
 
@@ -22,7 +23,8 @@ describe('PessoasService', () => {
           provide: getRepositoryToken(Pessoa), // injeta um fake do repositório
           useValue: {
             save: jest.fn(),
-            create: jest.fn()
+            create: jest.fn(),
+            findOneBy: jest.fn()
 
           }
         },
@@ -47,41 +49,92 @@ describe('PessoasService', () => {
   })
 
   describe('Testando a logica de cada metado create, findAll, findOne, update e remove', () => {
-    it('Metado create: deve criar uma nova pessoa', async () => {
-      // Arrange
-      const createPessoaDto: CreatePessoaDto = {
-        email: 'caio@gmail.com',
-        nome: 'caio',
-        password: '1254'
-      }
-      const passwordHash = 'HASHDESENHA'
-      const newPerson = {id: 1, nome: createPessoaDto.nome, email: createPessoaDto.email, passwordHash}
+    describe('Metado create:', () => {
 
-      //Como o valor retornado por hashingService.hash é necessario
-      // vamos simular este valorr
-      jest.spyOn(hashingService, "hash").mockResolvedValue('HASHDESENHA')
-      //como a pessoa retornada por pessoaRepository.create é necessaria em pessoaRepository.save. Vamos simular esse valor
-      jest.spyOn(pessoaRepository, "create").mockReturnValue(newPerson as any)
+      it('deve criar uma nova pessoa', async () => {
+        // Arrange
+        const createPessoaDto: CreatePessoaDto = {
+          email: 'caio@gmail.com',
+          nome: 'caio',
+          password: '1254'
+        }
+        const passwordHash = 'HASHDESENHA'
+        const newPerson = {id: 1, nome: createPessoaDto.nome, email: createPessoaDto.email, passwordHash}
 
-      // Act -> Ação
-      const result =await pessoaService.create(createPessoaDto)
+        //Como o valor retornado por hashingService.hash é necessario
+        // vamos simular este valorr
+        jest.spyOn(hashingService, "hash").mockResolvedValue('HASHDESENHA')
+        //como a pessoa retornada por pessoaRepository.create é necessaria em pessoaRepository.save. Vamos simular esse valor
+        jest.spyOn(pessoaRepository, "create").mockReturnValue(newPerson as any)
 
-      // Assert
-      // O metado hashingService.hash foi chamado com createPessoaDto.password?
-      expect(hashingService.hash).toHaveBeenCalledWith(createPessoaDto.password)
+        // Act -> Ação
+        const result =await pessoaService.create(createPessoaDto)
 
-      //o metado pessoaRepository.create foi chamado com os dados da nova pessoa com o hash de senha gerado por hashingService.hash?
-      expect(pessoaRepository.create).toHaveBeenCalledWith({
-        nome: createPessoaDto.nome,
-        passwordHash,
-        email: createPessoaDto.email,
+        // Assert
+        // O metado hashingService.hash foi chamado com createPessoaDto.password?
+        expect(hashingService.hash).toHaveBeenCalledWith(createPessoaDto.password)
+
+        //o metado pessoaRepository.create foi chamado com os dados da nova pessoa com o hash de senha gerado por hashingService.hash?
+        expect(pessoaRepository.create).toHaveBeenCalledWith({
+          nome: createPessoaDto.nome,
+          passwordHash,
+          email: createPessoaDto.email,
+        })
+
+        //o metado pessoaRepository.create foi chamado com os dados da nova pessoa gerado por pessoaRepository.create?
+        expect(pessoaRepository.save).toHaveBeenCalledWith(newPerson)
+
+        //O resultado do metado pessoaService.create retornou a nova pessoa criada?
+        expect(result).toEqual(newPerson)
       })
 
-      //o metado pessoaRepository.create foi chamado com os dados da nova pessoa gerado por pessoaRepository.create?
-      expect(pessoaRepository.save).toHaveBeenCalledWith(newPerson)
+      it('deve lançar ConflictException quando e-mail ja existe ', async () => {
 
-      //O resultado do metado pessoaService.create retornou a nova pessoa criada?
-      expect(result).toEqual(newPerson)
+        jest.spyOn(pessoaRepository, 'save').mockRejectedValue({
+          code: '23505'
+        })
+
+        await expect(pessoaService.create({} as any)).rejects.toThrow(ConflictException)
+      })
+
+      it('deve lançar ConflictException quando e-mail ja existe ', async () => {
+
+        jest.spyOn(pessoaRepository, 'save').mockRejectedValue(new Error('Error generico'))
+
+        await expect(pessoaService.create({} as any)).rejects.toThrow(new Error('Error generico'))
+      })
+    })
+    describe('Metado findOne: ', () => {
+      it('deve retorna uma pessoas se ela foi encontrada', async () => {
+        const pessoaId = 1
+        const pessoaEncontrada = {
+          id: pessoaId,
+          nome: 'Luiz',
+          email: 'caio@gmail.com',
+          passwordHash: '25464'
+        }
+
+        jest.spyOn(pessoaRepository, 'findOneBy').mockResolvedValue(pessoaEncontrada as any)
+
+        const result = await pessoaService.findOne(pessoaId)
+
+        expect(result).toEqual(pessoaEncontrada)
+      })
+
+      it('deve retorna um error quando a pessoa n for encontrada!', async () => {
+        const pessoaId = 1
+        const pessoaEncontrada = {
+          id: pessoaId,
+          nome: 'Luiz',
+          email: 'caio@gmail.com',
+          passwordHash: '25464'
+        }
+
+        await expect(pessoaService.findOne(pessoaId)).rejects.toThrow(new NotFoundException('Pessoa não encontrada'))
+
+      })
+
+
     })
   })
 })
