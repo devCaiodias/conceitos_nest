@@ -24,7 +24,8 @@ describe('PessoasService', () => {
           useValue: {
             save: jest.fn(),
             create: jest.fn(),
-            findOneBy: jest.fn()
+            findOneBy: jest.fn(),
+            find: jest.fn()
 
           }
         },
@@ -97,7 +98,7 @@ describe('PessoasService', () => {
         await expect(pessoaService.create({} as any)).rejects.toThrow(ConflictException)
       })
 
-      it('deve lançar ConflictException quando e-mail ja existe ', async () => {
+      it('deve lançar error generico quando o error for lançado  ', async () => {
 
         jest.spyOn(pessoaRepository, 'save').mockRejectedValue(new Error('Error generico'))
 
@@ -133,8 +134,29 @@ describe('PessoasService', () => {
         await expect(pessoaService.findOne(pessoaId)).rejects.toThrow(new NotFoundException('Pessoa não encontrada'))
 
       })
+    })
+    describe('Metado FindAll', () => {
+      it('deve retornar todas as pessoas', async () => {
+        const pessoasMock: Pessoa[] = [
+          {
+          id: 1,
+          nome: 'Luiz',
+          email: 'caio@gmail.com',
+          passwordHash: '25464'
+        } as Pessoa
+        ]
 
+        jest.spyOn(pessoaRepository,'find').mockResolvedValue(pessoasMock)
 
+        const result = await pessoaService.findAll()
+
+        expect(result).toEqual(pessoasMock)
+        expect(pessoaRepository.find).toHaveBeenCalledWith({
+          order: {
+        id: 'desc',
+      },
+        })
+      })
     })
   })
 })
